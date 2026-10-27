@@ -1,0 +1,116 @@
+{
+  "entities": {
+    "Project": {
+      "title": "Project",
+      "description": "Cinematic video gallery and client delivery portal project",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "slug": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "title": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "subtitle": {
+          "type": "string",
+          "maxLength": 300
+        },
+        "eventDate": {
+          "type": "string",
+          "maxLength": 100
+        },
+        "location": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "theme": {
+          "type": "string",
+          "maxLength": 50
+        },
+        "status": {
+          "type": "string",
+          "maxLength": 50
+        }
+      },
+      "required": [
+        "id",
+        "title"
+      ]
+    },
+    "Order": {
+      "title": "Order",
+      "description": "Store print or album order",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "orderNumber": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "projectId": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "clientEmail": {
+          "type": "string",
+          "maxLength": 150
+        },
+        "status": {
+          "type": "string",
+          "maxLength": 50
+        }
+      },
+      "required": [
+        "id",
+        "orderNumber",
+        "projectId"
+      ]
+    },
+    "Studio": {
+      "title": "Studio",
+      "description": "Filmmaker or photography studio profile",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "name": {
+          "type": "string",
+          "maxLength": 150
+        },
+        "email": {
+          "type": "string",
+          "maxLength": 150
+        }
+      },
+      "required": [
+        "id",
+        "name"
+      ]
+    }
+  },
+  "firestore": {
+    "/projects/{projectId}": {
+      "schema": "Project",
+      "description": "Public and studio client video projects and galleries"
+    },
+    "/orders/{orderId}": {
+      "schema": "Order",
+      "description": "Store print and album orders"
+    },
+    "/studios/{studioId}": {
+      "schema": "Studio",
+      "description": "Studio settings and configuration"
+    }
+  }
+}

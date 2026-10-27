@@ -1,0 +1,7 @@
+{
+  "name": "CineFlow Studio - Zero-Cost Vidflow Alternative",
+  "description": "A luxury cinematic video and photo client delivery portal for filmmakers and videographers. Deliver 4K films, chapters, and high-res downloads at $0 recurring cost using your own free storage.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
+

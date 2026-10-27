@@ -1,0 +1,38 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128;
+    }
+
+    // Projects: Client 4K video galleries & portals
+    match /projects/{projectId} {
+      allow read: if isValidId(projectId);
+      allow create, update: if isValidId(projectId);
+      allow delete: if isValidId(projectId);
+    }
+
+    // Orders: Print and album store orders
+    match /orders/{orderId} {
+      allow read: if isValidId(orderId);
+      allow create, update: if isValidId(orderId);
+      allow delete: if false;
+    }
+
+    // Studios: Professional studio settings and branding
+    match /studios/{studioId} {
+      allow read, write: if isValidId(studioId);
+    }
+
+    // Connection testing
+    match /test/{docId} {
+      allow read: if true;
+    }
+
+    // Default catch-all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
