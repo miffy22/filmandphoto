@@ -19,6 +19,7 @@ import { LegalModal } from './components/legal/LegalModal';
 import { GoogleDriveModal } from './components/studio/GoogleDriveModal';
 import { PrivateStudioModal } from './components/studio/PrivateStudioModal';
 import { StorageVaultModal } from './components/studio/StorageVaultModal';
+import { SharePlatformModal } from './components/studio/SharePlatformModal';
 import { ProfessionalStudio } from './types/cineflow';
 import { X, Cloud, CloudCheck, RefreshCw } from 'lucide-react';
 import {

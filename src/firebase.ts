@@ -1,5 +1,5 @@
 import { initializeApp } from 'firebase/app';
-import { getAuth } from 'firebase/auth';
+import { getAuth, signInAnonymously, onAuthStateChanged, User } from 'firebase/auth';
 import {
   getFirestore,
   doc,
@@ -10,12 +10,30 @@ import {
   deleteDoc,
   collection,
 } from 'firebase/firestore';
+import { getStorage, ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 import type { ClientProject, StoreOrder, ProfessionalStudio } from './types/cineflow';
 import firebaseConfig from '../firebase-applet-config.json';
 
 const app = initializeApp(firebaseConfig);
 export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
 export const auth = getAuth(app);
+export const storage = getStorage(app);
+export { ref, uploadBytesResumable, getDownloadURL };
+
+// Initialize anonymous auth for the session if not already signed in
+export async function ensureAuth(): Promise<User | null> {
+  if (auth.currentUser) return auth.currentUser;
+  try {
+    const cred = await signInAnonymously(auth);
+    return cred.user;
+  } catch (error) {
+    console.warn('Firebase Auth anonymous fallback notice:', error);
+    return null;
+  }
+}
+
+// Auto-trigger auth check on startup
+ensureAuth().catch(() => {});
 
 export enum OperationType {
   CREATE = 'create',
@@ -119,8 +137,11 @@ export async function fetchProjectByIdFromCloud(idOrSlug: string): Promise<Clien
 export async function saveProjectToCloud(project: ClientProject): Promise<boolean> {
   const path = `projects/${project.id}`;
   try {
+    const user = await ensureAuth();
     // Clean any undefined fields for Firestore serialization
     const sanitized = JSON.parse(JSON.stringify(project));
+    sanitized.ownerId = project.ownerId || user?.uid || 'studio_main';
+    sanitized.isPublished = project.isPublished !== undefined ? project.isPublished : (project.status === 'delivered');
     await setDoc(doc(db, 'projects', project.id), sanitized, { merge: true });
     return true;
   } catch (error) {
@@ -132,6 +153,7 @@ export async function saveProjectToCloud(project: ClientProject): Promise<boolea
 export async function deleteProjectFromCloud(projectId: string): Promise<boolean> {
   const path = `projects/${projectId}`;
   try {
+    await ensureAuth();
     await deleteDoc(doc(db, 'projects', projectId));
     return true;
   } catch (error) {
@@ -147,7 +169,11 @@ export async function deleteProjectFromCloud(projectId: string): Promise<boolean
 export async function saveOrderToCloud(order: StoreOrder): Promise<boolean> {
   const path = `orders/${order.id}`;
   try {
+    const user = await ensureAuth();
     const sanitized = JSON.parse(JSON.stringify(order));
+    if (user?.uid) {
+      sanitized.customerId = user.uid;
+    }
     await setDoc(doc(db, 'orders', order.id), sanitized, { merge: true });
     return true;
   } catch (error) {
@@ -159,6 +185,7 @@ export async function saveOrderToCloud(order: StoreOrder): Promise<boolean> {
 export async function fetchOrdersFromCloud(): Promise<StoreOrder[]> {
   const path = 'orders';
   try {
+    await ensureAuth();
     const snap = await getDocs(collection(db, path));
     const orders: StoreOrder[] = [];
     snap.forEach((d) => {
@@ -178,7 +205,9 @@ export async function fetchOrdersFromCloud(): Promise<StoreOrder[]> {
 export async function saveStudioToCloud(studio: ProfessionalStudio): Promise<boolean> {
   const path = `studios/${studio.id}`;
   try {
+    const user = await ensureAuth();
     const sanitized = JSON.parse(JSON.stringify(studio));
+    sanitized.ownerId = user?.uid || studio.id;
     await setDoc(doc(db, 'studios', studio.id), sanitized, { merge: true });
     return true;
   } catch (error) {

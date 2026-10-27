@@ -2,35 +2,87 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
     function isValidId(id) {
       return id is string && id.size() > 0 && id.size() <= 128;
     }
 
-    // Projects: Client 4K video galleries & portals
+    // Projects: Client 4K video galleries & delivery portals
     match /projects/{projectId} {
-      allow read: if isValidId(projectId);
-      allow create, update: if isValidId(projectId);
-      allow delete: if isValidId(projectId);
+      // 1. Unauthenticated users cannot list projects; only authenticated studios can list
+      allow list: if isAuthenticated();
+
+      // 2. Read single project (get):
+      // - Studio owners can read any of their own projects (draft or published)
+      // - Gallery guests can ONLY read explicitly published or delivered client galleries
+      allow get: if (isAuthenticated() && (resource.data.ownerId == request.auth.uid || resource.data.studioId == request.auth.uid))
+                 || (resource.data.isPublished == true || resource.data.status == 'delivered' || resource.data.status == 'published');
+
+      // 3. Create: Authenticated studio owner creating a project assigned to their UID
+      allow create: if isAuthenticated()
+                    && isValidId(projectId)
+                    && (request.resource.data.ownerId == request.auth.uid || request.resource.data.studioId == request.auth.uid);
+
+      // 4. Update: Only the owning studio; ownership cannot be hijacked
+      allow update: if isAuthenticated()
+                    && (resource.data.ownerId == request.auth.uid || resource.data.studioId == request.auth.uid)
+                    && (!('ownerId' in request.resource.data) || request.resource.data.ownerId == resource.data.ownerId);
+
+      // 5. Delete: Only the owning studio
+      allow delete: if isAuthenticated()
+                    && (resource.data.ownerId == request.auth.uid || resource.data.studioId == request.auth.uid);
     }
 
-    // Orders: Print and album store orders
+    // Orders: Fine art print and album store orders
     match /orders/{orderId} {
-      allow read: if isValidId(orderId);
-      allow create, update: if isValidId(orderId);
+      // Arbitrary visitors cannot list orders
+      allow list: if isAuthenticated();
+
+      // Get single order: Only owning studio or the purchasing customer
+      allow get: if isAuthenticated()
+                 && (resource.data.ownerId == request.auth.uid || resource.data.studioId == request.auth.uid || resource.data.customerId == request.auth.uid);
+
+      // Create: Allowed for client checkout with required transaction fields
+      allow create: if isValidId(orderId)
+                    && request.resource.data.orderNumber is string
+                    && request.resource.data.projectId is string
+                    && request.resource.data.total is number;
+
+      // Update: Only the owning studio can update order status / tracking
+      allow update: if isAuthenticated()
+                    && (resource.data.ownerId == request.auth.uid || resource.data.studioId == request.auth.uid);
+
+      // Delete: Orders are immutable financial records and cannot be deleted
       allow delete: if false;
     }
 
-    // Studios: Professional studio settings and branding
+    // Studios: Professional filmmaker studio profile and settings
     match /studios/{studioId} {
-      allow read, write: if isValidId(studioId);
+      // Unauthenticated users cannot list or read studios
+      allow list: if isAuthenticated();
+
+      // Studio owner only
+      allow get: if isAuthenticated() && (request.auth.uid == studioId || resource.data.ownerId == request.auth.uid);
+
+      // Create, update, delete: Studio owner only
+      allow create: if isAuthenticated() && (request.auth.uid == studioId || request.resource.data.ownerId == request.auth.uid);
+      allow update, delete: if isAuthenticated() && (request.auth.uid == studioId || resource.data.ownerId == request.auth.uid);
     }
 
-    // Connection testing
+    // Health / Connection test doc
     match /test/{docId} {
       allow read: if true;
+      allow write: if false;
     }
 
-    // Default catch-all
+    // Default deny
     match /{document=**} {
       allow read, write: if false;
     }

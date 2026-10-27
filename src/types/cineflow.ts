@@ -137,6 +137,8 @@ export interface ClientProject {
   location: string; // e.g. "Villa Cimbrone, Ravello, Italy"
   heroCoverVideoUrl?: string;
   heroCoverImageUrl: string;
+  ownerId?: string;
+  isPublished?: boolean;
   theme: GalleryTheme;
   isPasswordProtected: boolean;
   passcode?: string;

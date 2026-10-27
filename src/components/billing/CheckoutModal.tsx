@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, ShieldCheck, CheckCircle2, Lock, CreditCard, Sparkles, ArrowRight } from 'lucide-react';
+import { X, ShieldCheck, CheckCircle2, Lock, CreditCard, Sparkles, ExternalLink, AlertCircle, ArrowRight } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
 interface CheckoutModalProps {
@@ -17,7 +17,9 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
 }) => {
   const [email, setEmail] = useState('');
   const [studioName, setStudioName] = useState('');
+  const [customPaymentLink, setCustomPaymentLink] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
+  const [sandboxNotice, setSandboxNotice] = useState<string | null>(null);
   const [isCompleted, setIsCompleted] = useState(false);
 
   if (!isOpen) return null;
@@ -60,28 +62,44 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsProcessing(true);
+    setSandboxNotice(null);
+
     try {
       const res = await fetch('/api/billing/create-checkout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ planId, email, filmmakerName: studioName }),
+        body: JSON.stringify({
+          planId,
+          email,
+          filmmakerName: studioName,
+          customPaymentLink: customPaymentLink.trim() || undefined,
+        }),
       });
       const data = await res.json();
-      if (data.checkoutUrl && data.checkoutUrl.startsWith('https://buy.stripe.com/')) {
+
+      if (data.checkoutUrl) {
+        // Real checkout URL or Payment Link -> Redirect user
         window.location.href = data.checkoutUrl;
         return;
       }
-    } catch (err) {
-      console.warn('Billing dispatch notice:', err);
-    }
-    setTimeout(() => {
+
+      // If in sandbox mode without configured live Stripe keys
       setIsProcessing(false);
-      setIsCompleted(true);
-      try {
-        confetti({ particleCount: 90, spread: 70, origin: { y: 0.6 } });
-      } catch (err) {}
-      onUpgradeSuccess(planId);
-    }, 800);
+      setSandboxNotice(
+        data.message || 'Stripe keys not configured. You can test the studio upgrade flow in Sandbox Test Mode below.'
+      );
+    } catch (err: any) {
+      setIsProcessing(false);
+      setSandboxNotice(`Billing endpoint notice: ${err.message}`);
+    }
+  };
+
+  const handleTestModeProvision = () => {
+    setIsCompleted(true);
+    try {
+      confetti({ particleCount: 70, spread: 60, origin: { y: 0.6 } });
+    } catch (err) {}
+    onUpgradeSuccess(planId);
   };
 
   return (
@@ -90,7 +108,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
         <div className="flex items-start justify-between mb-6">
           <div>
             <span className="text-[10px] font-mono uppercase text-amber-400 bg-amber-950 px-2 py-0.5 rounded">
-              Secure Checkout
+              Verified Stripe Billing
             </span>
             <h3 className="font-cinzel text-xl sm:text-2xl font-bold text-white mt-1">
               {currentPlan.title}
@@ -112,10 +130,10 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
               <CheckCircle2 className="w-8 h-8" />
             </div>
             <h4 className="font-cinzel text-2xl font-bold text-white">
-              Welcome to CineFlow {currentPlan.title}!
+              Studio Tier Activated: {currentPlan.title}
             </h4>
             <p className="text-xs text-neutral-400 max-w-sm mx-auto">
-              Your studio account has been upgraded with unlimited galleries and custom domain capability.
+              Your studio configuration has been provisioned with expanded capacity.
             </p>
             <button
               type="button"
@@ -130,14 +148,14 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
             {/* Plan Price Banner */}
             <div className="p-4 rounded-2xl bg-neutral-950 border border-neutral-800 flex items-center justify-between">
               <div>
-                <span className="text-xs text-neutral-400">Total Investment</span>
+                <span className="text-xs text-neutral-400">Subscription Tier</span>
                 <div className="flex items-baseline gap-1 mt-0.5">
                   <span className="font-cinzel text-3xl font-extrabold text-white">{currentPlan.price}</span>
                   <span className="text-xs text-neutral-400">/{currentPlan.period}</span>
                 </div>
               </div>
               <span className="text-[10px] text-emerald-400 font-mono bg-emerald-950/60 border border-emerald-800/60 px-2 py-0.5 rounded">
-                Save $1,400+ vs VidFlow
+                Direct Stripe Gateway
               </span>
             </div>
 
@@ -169,41 +187,58 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
               />
             </div>
 
-            {/* Payment Method Details */}
-            <div className="p-3.5 rounded-2xl bg-neutral-950 border border-neutral-800 space-y-2">
-              <div className="flex items-center justify-between text-xs text-neutral-300">
-                <span className="flex items-center gap-1.5 font-semibold">
-                  <CreditCard className="w-4 h-4 text-amber-400" />
-                  Stripe / LemonSqueezy Gateway
-                </span>
-                <span className="text-[10px] font-mono text-emerald-400">256-bit Encrypted</span>
-              </div>
-              <div className="flex items-center gap-2 p-2 rounded-xl bg-neutral-900 border border-neutral-800 text-xs font-mono text-neutral-400">
-                <span>•••• •••• •••• 4242</span>
-                <span className="ml-auto text-neutral-500">12/28</span>
-              </div>
-            </div>
+            {/* Sandbox Notice Banner */}
+            {sandboxNotice && (
+              <div className="p-4 bg-amber-500/10 border border-amber-500/30 rounded-2xl space-y-3">
+                <div className="flex items-start gap-2.5 text-xs text-amber-300">
+                  <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <span className="font-bold">Stripe Sandbox Environment</span>
+                    <p className="text-[11px] text-neutral-400 mt-0.5">{sandboxNotice}</p>
+                  </div>
+                </div>
 
-            <div className="pt-2">
-              <button
-                type="submit"
-                disabled={isProcessing}
-                className="w-full py-3.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-neutral-950 font-bold text-sm flex items-center justify-center gap-2 transition-all shadow-xl shadow-amber-500/20 disabled:opacity-50"
-              >
-                {isProcessing ? (
-                  <span>Activating Account...</span>
-                ) : (
-                  <>
-                    <Lock className="w-4 h-4" />
-                    <span>Confirm & Activate {currentPlan.title}</span>
-                  </>
-                )}
-              </button>
-            </div>
+                <div className="pt-1 flex gap-2">
+                  <button
+                    type="button"
+                    onClick={handleTestModeProvision}
+                    className="flex-1 py-2 px-3 rounded-lg bg-amber-500 hover:bg-amber-400 text-neutral-950 font-bold text-xs transition-colors"
+                  >
+                    Provision Test Mode Account
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSandboxNotice(null)}
+                    className="py-2 px-3 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-300 text-xs"
+                  >
+                    Back
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {!sandboxNotice && (
+              <div className="pt-2">
+                <button
+                  type="submit"
+                  disabled={isProcessing}
+                  className="w-full py-3.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-neutral-950 font-bold text-sm flex items-center justify-center gap-2 transition-all shadow-xl shadow-amber-500/20 disabled:opacity-50"
+                >
+                  {isProcessing ? (
+                    <span>Connecting to Stripe Gateway...</span>
+                  ) : (
+                    <>
+                      <Lock className="w-4 h-4" />
+                      <span>Proceed to Stripe Checkout</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            )}
 
             <div className="flex items-center justify-center gap-2 text-[11px] text-neutral-500 pt-1">
               <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-              <span>14-Day Money Back Guarantee · Instant Delivery</span>
+              <span>TLS 256-bit Encrypted · Verified Stripe Gateway</span>
             </div>
           </form>
         )}
