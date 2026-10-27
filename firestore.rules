@@ -14,6 +14,28 @@ service cloud.firestore {
       return id is string && id.size() > 0 && id.size() <= 128;
     }
 
+    function isProjectOwner() {
+      return isAuthenticated() && (
+        resource.data.ownerId == request.auth.uid ||
+        ('studioId' in resource.data && resource.data.studioId == request.auth.uid)
+      );
+    }
+
+    function isProjectCreator() {
+      return isAuthenticated() && (
+        request.resource.data.ownerId == request.auth.uid ||
+        ('studioId' in request.resource.data && request.resource.data.studioId == request.auth.uid)
+      );
+    }
+
+    function isOrderParticipant() {
+      return isAuthenticated() && (
+        resource.data.ownerId == request.auth.uid ||
+        ('studioId' in resource.data && resource.data.studioId == request.auth.uid) ||
+        ('customerId' in resource.data && resource.data.customerId == request.auth.uid)
+      );
+    }
+
     // Projects: Client 4K video galleries & delivery portals
     match /projects/{projectId} {
       // 1. Unauthenticated users cannot list projects; only authenticated studios can list
@@ -22,45 +44,32 @@ service cloud.firestore {
       // 2. Read single project (get):
       // - Studio owners can read any of their own projects (draft or published)
       // - Gallery guests can ONLY read explicitly published or delivered client galleries
-      allow get: if (isAuthenticated() && (resource.data.ownerId == request.auth.uid || resource.data.studioId == request.auth.uid))
+      allow get: if isProjectOwner()
                  || (resource.data.isPublished == true || resource.data.status == 'delivered' || resource.data.status == 'published');
 
       // 3. Create: Authenticated studio owner creating a project assigned to their UID
-      allow create: if isAuthenticated()
-                    && isValidId(projectId)
-                    && (request.resource.data.ownerId == request.auth.uid || request.resource.data.studioId == request.auth.uid);
+      allow create: if isValidId(projectId) && isProjectCreator();
 
       // 4. Update: Only the owning studio; ownership cannot be hijacked
-      allow update: if isAuthenticated()
-                    && (resource.data.ownerId == request.auth.uid || resource.data.studioId == request.auth.uid)
+      allow update: if isProjectOwner()
                     && (!('ownerId' in request.resource.data) || request.resource.data.ownerId == resource.data.ownerId);
 
       // 5. Delete: Only the owning studio
-      allow delete: if isAuthenticated()
-                    && (resource.data.ownerId == request.auth.uid || resource.data.studioId == request.auth.uid);
+      allow delete: if isProjectOwner();
     }
 
     // Orders: Fine art print and album store orders
+    // Financial records are strictly managed via trusted server-side flows (Stripe / backend)
     match /orders/{orderId} {
       // Arbitrary visitors cannot list orders
       allow list: if isAuthenticated();
 
-      // Get single order: Only owning studio or the purchasing customer
-      allow get: if isAuthenticated()
-                 && (resource.data.ownerId == request.auth.uid || resource.data.studioId == request.auth.uid || resource.data.customerId == request.auth.uid);
+      // Read single order: Only the owning studio or the purchasing customer
+      allow get: if isOrderParticipant();
 
-      // Create: Allowed for client checkout with required transaction fields
-      allow create: if isValidId(orderId)
-                    && request.resource.data.orderNumber is string
-                    && request.resource.data.projectId is string
-                    && request.resource.data.total is number;
-
-      // Update: Only the owning studio can update order status / tracking
-      allow update: if isAuthenticated()
-                    && (resource.data.ownerId == request.auth.uid || resource.data.studioId == request.auth.uid);
-
-      // Delete: Orders are immutable financial records and cannot be deleted
-      allow delete: if false;
+      // Prevent untrusted clients from creating fabricated financial records or changing prices
+      // All order creations and status updates must originate from trusted server-side flows
+      allow create, update, delete: if false;
     }
 
     // Studios: Professional filmmaker studio profile and settings
@@ -72,8 +81,8 @@ service cloud.firestore {
       allow get: if isAuthenticated() && (request.auth.uid == studioId || resource.data.ownerId == request.auth.uid);
 
       // Create, update, delete: Studio owner only
-      allow create: if isAuthenticated() && (request.auth.uid == studioId || request.resource.data.ownerId == request.auth.uid);
-      allow update, delete: if isAuthenticated() && (request.auth.uid == studioId || resource.data.ownerId == request.auth.uid);
+      allow create: if isAuthenticated() && (request.auth.uid == studioId || ('ownerId' in request.resource.data && request.resource.data.ownerId == request.auth.uid));
+      allow update, delete: if isAuthenticated() && (request.auth.uid == studioId || ('ownerId' in resource.data && resource.data.ownerId == request.auth.uid));
     }
 
     // Health / Connection test doc

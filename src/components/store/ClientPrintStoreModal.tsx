@@ -152,13 +152,46 @@ export const ClientPrintStoreModal: React.FC<ClientPrintStoreModalProps> = ({
   const cartTotal = Math.max(0, cartSubtotal - discountAmount + cartShipping);
   const photographerProfit = Math.max(0, cartSubtotal - discountAmount - cartLabCost);
 
-  const handleCompleteOrder = (e: React.FormEvent) => {
+  const [checkoutError, setCheckoutError] = useState<string | null>(null);
+
+  const handleCompleteOrder = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsCheckingOut(true);
+    setCheckoutError(null);
 
-    setTimeout(() => {
-      const newOrder: StoreOrder = {
-        id: `ord_${Date.now()}`,
+    try {
+      const res = await fetch('/api/store/create-checkout-session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          projectId: project.id,
+          clientName: fullName,
+          clientEmail: email,
+          shippingAddress: {
+            fullName,
+            street,
+            city,
+            state,
+            zip,
+            country: 'United States',
+          },
+          items: cart,
+          couponCode: appliedCoupon?.code,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (data.checkoutUrl) {
+        // Genuine Stripe Checkout session redirect
+        window.location.href = data.checkoutUrl;
+        return;
+      }
+
+      // Sandbox Test Mode fallback (no live card charged)
+      setIsCheckingOut(false);
+      const testOrder: StoreOrder = data.order || {
+        id: data.orderId || `ord_${Date.now()}`,
         orderNumber: `CF-${Math.floor(1000 + Math.random() * 9000)}`,
         projectId: project.id,
         clientName: fullName,
@@ -181,19 +214,19 @@ export const ClientPrintStoreModal: React.FC<ClientPrintStoreModalProps> = ({
         labCostTotal: cartLabCost,
         status: 'in_production',
         labProvider: project.printLab || 'whcc',
-        trackingNumber: `WHCC-${Date.now().toString().slice(-8)}`,
         createdAt: new Date().toISOString(),
       };
 
-      try {
-        confetti({ particleCount: 90, spread: 70, origin: { y: 0.5 } });
-      } catch (e) {}
-
-      setIsCheckingOut(false);
-      setOrderComplete(newOrder);
-      onOrderPlaced(newOrder);
+      setOrderComplete(testOrder);
+      onOrderPlaced(testOrder);
       setCart([]);
-    }, 1200);
+      try {
+        confetti({ particleCount: 70, spread: 60, origin: { y: 0.5 } });
+      } catch (err) {}
+    } catch (err: any) {
+      setIsCheckingOut(false);
+      setCheckoutError(`Checkout service notice: ${err.message}`);
+    }
   };
 
   const activeLab = PRINT_LAB_INFO[project.printLab || 'whcc'];
